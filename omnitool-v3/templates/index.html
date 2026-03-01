@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniTool – File Processing Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        surface: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 700: '#1e293b', 800: '#0f172a', 900: '#020617' },
+                        accent: { 400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed' },
+                        glow: '#8b5cf6',
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #334155 #0f172a;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 999px;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        .sidebar-item {
+            transition: all .2s ease;
+        }
+
+        .sidebar-item:hover {
+            background: rgba(139, 92, 246, .12);
+        }
+
+        .sidebar-item.active {
+            background: linear-gradient(135deg, rgba(139, 92, 246, .18), rgba(139, 92, 246, .08));
+            border-left: 3px solid #8b5cf6;
+        }
+
+        .glass {
+            background: rgba(15, 23, 42, .6);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(139, 92, 246, .12);
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, .5);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, .5);
+            border-radius: 16px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            transition: all .25s ease;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, .3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, .4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: rgba(51, 65, 85, .4);
+            border: 1px solid rgba(100, 116, 139, .3);
+            transition: all .2s ease;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(51, 65, 85, .6);
+            border-color: rgba(139, 92, 246, .4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            transition: all .25s ease;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, .3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(239, 68, 68, .4);
+        }
+
+        .toggle-track {
+            transition: background .2s ease;
+        }
+
+        .toggle-thumb {
+            transition: transform .2s ease;
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, #8b5cf6, #a78bfa, #c4b5fd);
+            background-size: 200% 100%;
+            animation: shimmer 2s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: 200% 0
+            }
+
+            100% {
+                background-position: -200% 0
+            }
+        }
+
+        .console-line {
+            animation: fadeIn .15s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-backdrop {
+            animation: fadeInBg .2s ease;
+        }
+
+        @keyframes fadeInBg {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .modal-content {
+            animation: slideUp .25s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .file-chip {
+            animation: fadeIn .2s ease;
+        }
+
+        input[type="number"],
+        input[type="text"],
+        select {
+            background: rgba(15, 23, 42, .6);
+            border: 1px solid rgba(51, 65, 85, .5);
+            color: #e2e8f0;
+            border-radius: 10px;
+            padding: 10px 14px;
+            transition: border-color .2s ease;
+            outline: none;
+        }
+
+        input[type="number"]:focus,
+        input[type="text"]:focus,
+        select:focus {
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, .15);
+        }
+
+        select option {
+            background: #1e293b;
+            color: #e2e8f0;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse-dot 2s ease infinite;
+        }
+
+        @keyframes pulse-dot {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .4
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-surface-900 text-surface-200 min-h-screen flex overflow-hidden">
+
+    <!-- ======================== SIDEBAR ======================== -->
+    <aside
+        class="w-72 bg-surface-800/80 backdrop-blur-xl border-r border-surface-700/50 flex flex-col h-screen shrink-0">
+        <!-- Logo -->
+        <div class="px-6 py-6 border-b border-surface-700/50">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-500 to-purple-700 flex items-center justify-center shadow-lg shadow-accent-500/20">
+                    <i class="fas fa-bolt text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-white tracking-tight">OmniTool</h1>
+                    <p class="text-xs text-surface-200/50 font-medium">File Processing Studio</p>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Nav -->
+        <nav class="flex-1 overflow-y-auto py-3 px-3 space-y-1">
+            <p class="px-3 pt-2 pb-2 text-[10px] font-bold uppercase tracking-widest text-surface-200/30">Image Tools
+            </p>
+            <button onclick="selectTool('resizer')" data-tool="resizer"
+                class="sidebar-item active w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center"><i
+                        class="fas fa-expand text-blue-400 text-sm"></i></div>
+                <span class="text-sm font-medium">Advanced Resizer</span>
+            </button>
+            <button onclick="selectTool('watermark')" data-tool="watermark"
+                class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center"><i
+                        class="fas fa-droplet text-emerald-400 text-sm"></i></div>
+                <span class="text-sm font-medium">Watermark</span>
+            </button>
+            <button onclick="selectTool('metadata')" data-tool="metadata"
+                class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-rose-500/15 flex items-center justify-center"><i
+                        class="fas fa-eraser text-rose-400 text-sm"></i></div>
+                <span class="text-sm font-medium">Convert to JPG</span>
+            </button>
+
+            <p class="px-3 pt-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-surface-200/30">Media Tools
+            </p>
+            <button onclick="selectTool('audio')" data-tool="audio"
+                class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center"><i
+                        class="fas fa-music text-amber-400 text-sm"></i></div>
+                <span class="text-sm font-medium">WAV → MP3</span>
+            </button>
+            <button onclick="selectTool('video')" data-tool="video"
+                class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center"><i
+                        class="fas fa-film text-cyan-400 text-sm"></i></div>
+                <span class="text-sm font-medium">Video Compress</span>
+            </button>
+
+            <p class="px-3 pt-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-surface-200/30">Document Tools
+            </p>
+            <button onclick="selectTool('pdf')" data-tool="pdf"
+                class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center"><i
+                        class="fas fa-file-pdf text-red-400 text-sm"></i></div>
+                <span class="text-sm font-medium">PDF Compress</span>
+            </button>
+
+            <p class="px-3 pt-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-surface-200/30">Utility</p>
+            <button onclick="selectTool('rename')" data-tool="rename"
+                class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-violet-500/15 flex items-center justify-center"><i
+                        class="fas fa-pen text-violet-400 text-sm"></i></div>
+                <span class="text-sm font-medium">Batch Rename</span>
+            </button>
+            <button onclick="selectTool('strip_only')" data-tool="strip_only"
+                class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center"><i
+                        class="fas fa-shield-halved text-emerald-400 text-sm"></i></div>
+                <span class="text-sm font-medium">Just strip metadata</span>
+            </button>
+        </nav>
+
+        <!-- Footer -->
+        <div class="px-5 py-4 border-t border-surface-700/50 space-y-4">
+            <!-- Meta toggle -->
+            <div class="flex items-center justify-between glass-card px-4 py-3">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-shield-halved text-accent-400 text-sm"></i>
+                    <span class="text-xs font-semibold text-surface-200">Strip Metadata</span>
+                </div>
+                <button id="metaToggle" onclick="toggleMeta()"
+                    class="relative w-11 h-6 rounded-full toggle-track bg-accent-500 cursor-pointer">
+                    <span
+                        class="toggle-thumb absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transform translate-x-5"></span>
+                </button>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center gap-2 text-xs text-surface-200/40">
+                    <div class="status-dot bg-emerald-400"></div>
+                    <span>Ready • localhost:5000</span>
+                </div>
+                <div class="text-[10px] text-surface-200/25">
+                    Built by [<a href="https://witty.computer" target="_blank" rel="noopener"
+                        class="text-accent-400/50 hover:text-accent-400 transition-colors">Witty.Computer</a>]
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ======================== MAIN ======================== -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden">
+
+        <!-- Top bar -->
+        <header class="px-8 py-5 border-b border-surface-700/50 flex items-center justify-between shrink-0">
+            <div>
+                <h2 id="toolTitle" class="text-xl font-bold text-white">Advanced Resizer</h2>
+                <p id="toolDesc" class="text-sm text-surface-200/50 mt-0.5">Resize images by percentage or to a fixed
+                    dimension</p>
+            </div>
+            <button onclick="refreshFiles()"
+                class="btn-secondary px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2">
+                <i class="fas fa-rotate text-accent-400"></i>
+                Refresh Files
+            </button>
+        </header>
+
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Left: Settings -->
+            <div class="flex-1 overflow-y-auto p-8">
+                <!-- File chips -->
+                <div class="glass-card p-5 mb-6">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fas fa-folder-open text-accent-400 text-sm"></i>
+                        <span class="text-sm font-semibold text-white">Files in /input</span>
+                        <span id="fileCount"
+                            class="ml-auto text-xs px-2 py-0.5 bg-accent-500/15 text-accent-400 rounded-full font-semibold">0</span>
+                    </div>
+                    <div id="fileList" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                        <span class="text-xs text-surface-200/40 italic">Loading…</span>
+                    </div>
+                </div>
+
+                <!-- Tool settings panels -->
+                <!-- RESIZER -->
+                <div id="panel-resizer" class="tool-panel glass-card p-6 space-y-5">
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Mode</label>
+                        <select id="resizer-mode" onchange="toggleResizerFields()" class="w-full">
+                            <option value="percentage">Percentage</option>
+                            <option value="fixed">Fixed Dimension</option>
+                        </select>
+                    </div>
+                    <div id="resizer-percent-fields">
+                        <label
+                            class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Scale
+                            Percentage</label>
+                        <div class="flex items-center gap-3">
+                            <input type="number" id="resizer-percent" value="50" min="1" max="500" class="w-32">
+                            <span class="text-sm text-surface-200/40">%</span>
+                        </div>
+                    </div>
+                    <div id="resizer-fixed-fields" class="hidden space-y-4">
+                        <div>
+                            <label
+                                class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Target
+                                Side</label>
+                            <select id="resizer-side" class="w-full">
+                                <option value="largest">Largest Side</option>
+                                <option value="smallest">Smallest Side</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label
+                                class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Target
+                                Size (px)</label>
+                            <input type="number" id="resizer-target" value="1920" min="1" class="w-40">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WATERMARK -->
+                <div id="panel-watermark" class="tool-panel glass-card p-6 space-y-5 hidden">
+                    <div
+                        class="flex items-start gap-3 p-3 rounded-lg bg-emerald-500/8 border border-emerald-500/15 mb-1">
+                        <i class="fas fa-info-circle text-emerald-400 text-sm mt-0.5 shrink-0"></i>
+                        <p class="text-xs text-emerald-300/80">You must add a file named <strong
+                                class="text-emerald-300">watermark.png</strong> in the <strong
+                                class="text-emerald-300">/input</strong> folder. This file will not be deleted.</p>
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Position</label>
+                        <select id="wm-position" class="w-full">
+                            <option value="top-left">↖ Top Left</option>
+                            <option value="top-right">↗ Top Right</option>
+                            <option value="center">◎ Center</option>
+                            <option value="bottom-left">↙ Bottom Left</option>
+                            <option value="bottom-right" selected>↘ Bottom Right</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Coverage
+                            %</label>
+                        <div class="flex items-center gap-3">
+                            <input type="number" id="wm-coverage" value="25" min="1" max="100" class="w-32">
+                            <span class="text-sm text-surface-200/40">% of image width</span>
+                        </div>
+                    </div>
+                    <button onclick="previewWatermark()"
+                        class="btn-secondary px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2">
+                        <i class="fas fa-eye text-emerald-400"></i>
+                        Preview Watermark
+                    </button>
+                </div>
+
+                <!-- METADATA -->
+                <div id="panel-metadata" class="tool-panel glass-card p-6 hidden">
+                    <div class="flex items-center gap-3 text-surface-200/60">
+                        <i class="fas fa-info-circle text-accent-400"></i>
+                        <p class="text-sm">Strips all EXIF metadata and converts images (PNG, WEBP, HEIC, AVIF, BMP,
+                            TIFF) to high-quality JPG.</p>
+                    </div>
+                </div>
+
+                <!-- AUDIO -->
+                <div id="panel-audio" class="tool-panel glass-card p-6 space-y-5 hidden">
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Bitrate</label>
+                        <select id="audio-bitrate" class="w-full">
+                            <option value="128k">128 kbps – Smaller files</option>
+                            <option value="192k" selected>192 kbps – Balanced</option>
+                            <option value="320k">320 kbps – High quality</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- VIDEO -->
+                <div id="panel-video" class="tool-panel glass-card p-6 hidden">
+                    <div class="flex items-center gap-3 text-surface-200/60">
+                        <i class="fas fa-info-circle text-accent-400"></i>
+                        <p class="text-sm">Compresses MP4/MOV/AVI/MKV videos using H.264 with CRF 23 (good quality/size
+                            balance).</p>
+                    </div>
+                </div>
+
+                <!-- PDF -->
+                <div id="panel-pdf" class="tool-panel glass-card p-6 hidden">
+                    <div class="flex items-center gap-3 text-surface-200/60">
+                        <i class="fas fa-info-circle text-accent-400"></i>
+                        <p class="text-sm">Compresses PDF files using Ghostscript at 150dpi (/ebook preset).</p>
+                    </div>
+                </div>
+
+                <!-- RENAME -->
+                <div id="panel-rename" class="tool-panel glass-card p-6 space-y-5 hidden">
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Prefix</label>
+                        <input type="text" id="rename-prefix" value="file" class="w-full" placeholder="e.g. photo">
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Start
+                            Number</label>
+                        <input type="number" id="rename-start" value="1" min="0" class="w-32">
+                    </div>
+                </div>
+
+                <!-- STRIP ONLY -->
+                <div id="panel-strip_only" class="tool-panel glass-card p-6 hidden">
+                    <div class="flex items-center gap-3 text-surface-200/60">
+                        <i class="fas fa-info-circle text-accent-400"></i>
+                        <p class="text-sm">Removes all EXIF/metadata from images while preserving original format (JPG,
+                            PNG, WEBP, AVIF).</p>
+                    </div>
+                </div>
+
+                <!-- Process / Stop buttons -->
+                <div class="mt-6 flex items-center gap-3">
+                    <button id="processBtn" onclick="startProcess()"
+                        class="btn-primary px-8 py-3 rounded-xl text-sm font-bold text-white flex items-center gap-3">
+                        <i class="fas fa-play"></i>
+                        Process Files
+                    </button>
+                    <button id="stopBtn" onclick="stopProcess()"
+                        class="btn-danger px-6 py-3 rounded-xl text-sm font-bold text-white items-center gap-2 hidden">
+                        <i class="fas fa-stop"></i>
+                        Stop
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right: Console -->
+            <div class="w-96 border-l border-surface-700/50 flex flex-col shrink-0">
+                <div class="px-5 py-4 border-b border-surface-700/50 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-terminal text-accent-400 text-sm"></i>
+                        <span class="text-sm font-semibold text-white">Console Log</span>
+                    </div>
+                    <button onclick="clearConsole()"
+                        class="text-xs text-surface-200/30 hover:text-surface-200/60 transition-colors">Clear</button>
+                </div>
+
+                <!-- Progress bar -->
+                <div class="px-5 py-3 border-b border-surface-700/50">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-xs font-medium text-surface-200/50">Progress</span>
+                        <span id="progressPercent" class="text-xs font-bold text-accent-400">0%</span>
+                    </div>
+                    <div class="w-full h-2 bg-surface-700/50 rounded-full overflow-hidden">
+                        <div id="progressBar" class="progress-bar h-full rounded-full transition-all duration-300"
+                            style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Log area -->
+                <div id="consoleLog" class="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-1">
+                    <div class="text-surface-200/30 italic">Waiting for a task…</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ======================== PREVIEW MODAL ======================== -->
+    <div id="previewModal" class="fixed inset-0 z-50 hidden items-center justify-center p-8 modal-backdrop"
+        style="background: rgba(0,0,0,.7);">
+        <div class="modal-content glass-card max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-surface-700/50">
+                <h3 class="text-base font-bold text-white">Watermark Preview</h3>
+                <button onclick="closePreview()" class="text-surface-200/40 hover:text-white transition-colors text-lg">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+            <div class="flex-1 overflow-auto p-6 flex items-center justify-center">
+                <img id="previewImg" src="" class="max-w-full max-h-full rounded-lg shadow-2xl">
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // ─── State ───────────────────────────────────────────────────────────
+        let currentTool = 'resizer';
+        let metaEnabled = true;
+        let processing = false;
+        let activeEvtSource = null;
+
+        const TOOL_INFO = {
+            resizer: { title: 'Advanced Resizer', desc: 'Resize images by percentage or to a fixed dimension' },
+            watermark: { title: 'Watermark', desc: 'Overlay watermark.png onto your images with position & coverage control' },
+            metadata: { title: 'Convert to JPG', desc: 'Strip all EXIF/metadata and convert to high-quality JPG' },
+            audio: { title: 'WAV → MP3 Converter', desc: 'Convert WAV audio files to MP3 with selectable bitrate' },
+            video: { title: 'Video Compress', desc: 'Compress video files using H.264 / CRF 23' },
+            pdf: { title: 'PDF Compress', desc: 'Compress PDFs using Ghostscript (150dpi ebook preset)' },
+            rename: { title: 'Batch Rename', desc: 'Rename files with prefix and zero-padded numbering' },
+            strip_only: { title: 'Just strip metadata', desc: 'Remove all EXIF/metadata while preserving original format' },
+        };
+
+        // ─── Tool selection ──────────────────────────────────────────────────
+        function selectTool(name) {
+            if (processing) return;
+            currentTool = name;
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+            document.querySelector(`[data-tool="${name}"]`).classList.add('active');
+            document.querySelectorAll('.tool-panel').forEach(el => el.classList.add('hidden'));
+            document.getElementById('panel-' + name).classList.remove('hidden');
+            document.getElementById('toolTitle').textContent = TOOL_INFO[name].title;
+            document.getElementById('toolDesc').textContent = TOOL_INFO[name].desc;
+        }
+
+        // ─── Meta toggle ─────────────────────────────────────────────────────
+        function toggleMeta() {
+            metaEnabled = !metaEnabled;
+            const btn = document.getElementById('metaToggle');
+            const thumb = btn.querySelector('.toggle-thumb');
+            if (metaEnabled) {
+                btn.classList.remove('bg-surface-700');
+                btn.classList.add('bg-accent-500');
+                thumb.classList.add('translate-x-5');
+                thumb.classList.remove('translate-x-0');
+            } else {
+                btn.classList.add('bg-surface-700');
+                btn.classList.remove('bg-accent-500');
+                thumb.classList.remove('translate-x-5');
+                thumb.classList.add('translate-x-0');
+            }
+        }
+
+        // ─── Resizer fields toggle ──────────────────────────────────────────
+        function toggleResizerFields() {
+            const mode = document.getElementById('resizer-mode').value;
+            document.getElementById('resizer-percent-fields').classList.toggle('hidden', mode !== 'percentage');
+            document.getElementById('resizer-fixed-fields').classList.toggle('hidden', mode !== 'fixed');
+        }
+
+        // ─── File list ───────────────────────────────────────────────────────
+        async function refreshFiles() {
+            try {
+                const res = await fetch('/api/files');
+                const files = await res.json();
+                const container = document.getElementById('fileList');
+                const count = document.getElementById('fileCount');
+                count.textContent = files.length;
+
+                if (files.length === 0) {
+                    container.innerHTML = '<span class="text-xs text-surface-200/40 italic">No files in /input</span>';
+                    return;
+                }
+                container.innerHTML = files.map(f => {
+                    const sizeStr = f.size > 1048576 ? (f.size / 1048576).toFixed(1) + 'MB' : (f.size / 1024).toFixed(0) + 'KB';
+                    const icon = f.is_watermark ? 'fa-droplet text-emerald-400' : 'fa-file text-surface-200/30';
+                    return `<span class="file-chip inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${f.is_watermark ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-surface-700/40 text-surface-200/70 border border-surface-700/30'}">
+                <i class="fas ${icon} text-[10px]"></i>${f.name}<span class="text-[10px] opacity-50">${sizeStr}</span></span>`;
+                }).join('');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // ─── Console ─────────────────────────────────────────────────────────
+        function log(msg, type = 'info') {
+            const c = document.getElementById('consoleLog');
+            const colors = { info: 'text-surface-200/70', success: 'text-emerald-400', error: 'text-red-400', done: 'text-accent-400 font-semibold' };
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            c.innerHTML += `<div class="console-line ${colors[type] || colors.info}"><span class="text-surface-200/25 mr-2">${time}</span>${msg}</div>`;
+            c.scrollTop = c.scrollHeight;
+        }
+        function clearConsole() {
+            document.getElementById('consoleLog').innerHTML = '<div class="text-surface-200/30 italic">Console cleared.</div>';
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressPercent').textContent = '0%';
+        }
+
+        // ─── Collect options ─────────────────────────────────────────────────
+        function getOptions() {
+            const opts = { strip_metadata: metaEnabled };
+            switch (currentTool) {
+                case 'resizer':
+                    opts.mode = document.getElementById('resizer-mode').value;
+                    opts.target_size = opts.mode === 'percentage'
+                        ? document.getElementById('resizer-percent').value
+                        : document.getElementById('resizer-target').value;
+                    opts.side = document.getElementById('resizer-side').value;
+                    break;
+                case 'watermark':
+                    opts.position = document.getElementById('wm-position').value;
+                    opts.coverage = document.getElementById('wm-coverage').value;
+                    break;
+                case 'audio':
+                    opts.bitrate = document.getElementById('audio-bitrate').value;
+                    break;
+                case 'rename':
+                    opts.prefix = document.getElementById('rename-prefix').value;
+                    opts.start_number = document.getElementById('rename-start').value;
+                    break;
+            }
+            return opts;
+        }
+
+        // ─── Process ─────────────────────────────────────────────────────────
+        function resetButtons() {
+            const btn = document.getElementById('processBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            btn.innerHTML = '<i class="fas fa-play"></i> Process Files';
+            btn.disabled = false;
+            stopBtn.classList.add('hidden');
+            stopBtn.classList.remove('flex');
+            processing = false;
+            activeEvtSource = null;
+        }
+
+        async function startProcess() {
+            if (processing) return;
+            processing = true;
+            const btn = document.getElementById('processBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing…';
+            btn.disabled = true;
+            stopBtn.classList.remove('hidden');
+            stopBtn.classList.add('flex');
+
+            clearConsole();
+            log('Starting ' + TOOL_INFO[currentTool].title + '…');
+
+            // Start SSE listener FIRST
+            const evtSource = new EventSource('/api/stream');
+            activeEvtSource = evtSource;
+            evtSource.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'log') log(data.msg);
+                if (data.type === 'progress') {
+                    document.getElementById('progressBar').style.width = data.value + '%';
+                    document.getElementById('progressPercent').textContent = data.value + '%';
+                }
+                if (data.type === 'done') {
+                    log(data.msg, 'done');
+                    evtSource.close();
+                    resetButtons();
+                    refreshFiles();
+                }
+            };
+            evtSource.onerror = () => {
+                evtSource.close();
+                resetButtons();
+            };
+
+            // Small delay so the SSE connection is established before the POST
+            await new Promise(r => setTimeout(r, 150));
+
+            // Trigger processing
+            try {
+                await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tool: currentTool, options: getOptions() })
+                });
+            } catch (e) {
+                log('ERROR: ' + e.message, 'error');
+                resetButtons();
+            }
+        }
+
+        async function stopProcess() {
+            log('⛔ Stopping…', 'error');
+            try {
+                await fetch('/api/stop', { method: 'POST' });
+            } catch (e) { /* ignore */ }
+            // The SSE stream will handle sending the done event
+        }
+
+        // ─── Preview watermark ───────────────────────────────────────────────
+        async function previewWatermark() {
+            log('Generating watermark preview…');
+            try {
+                const res = await fetch('/api/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ options: { position: document.getElementById('wm-position').value, coverage: document.getElementById('wm-coverage').value } })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    document.getElementById('previewImg').src = data.url + '?t=' + Date.now();
+                    document.getElementById('previewModal').classList.remove('hidden');
+                    document.getElementById('previewModal').classList.add('flex');
+                    log('Preview ready.', 'success');
+                } else {
+                    log('Preview failed: ' + data.error, 'error');
+                }
+            } catch (e) {
+                log('Preview error: ' + e.message, 'error');
+            }
+        }
+        function closePreview() {
+            document.getElementById('previewModal').classList.add('hidden');
+            document.getElementById('previewModal').classList.remove('flex');
+        }
+
+        // ─── Init ────────────────────────────────────────────────────────────
+        refreshFiles();
+    </script>
+</body>
+
+</html>
