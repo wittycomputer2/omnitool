@@ -28,4 +28,4 @@ Launch:
 Bash
 python app.py
 
-🎓 Learning Resources: Need help setting up your digital environment? Visit University.witty.computer for full documentation and video guides provided by the Witty Computer Digital Workshop.
+🎓 Learning Resources: Need help setting up your digital environment? Visit https://university.witty.computer for full documentation and video guides provided by the Witty Computer Digital Workshop.  Special thanks to https://neonghost.net for their support.
