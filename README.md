@@ -1,10 +1,4 @@
-Gemini said
-Since you've included the AppImage directly in the main folder, you can make the README very user-friendly by linking to it.
 
-Here is how to structure that section of your README.md to be clear for beginners while keeping your SEO links prominent.
-
-📝 Updated "How to Use" Section
-Copy and replace your current usage section with this:
 
 🚀 How to Run OmniTool
 Option 1: Using the AppImage (Easiest)
@@ -33,3 +27,5 @@ Launch:
 
 Bash
 python app.py
+
+🎓 Learning Resources: Need help setting up your digital environment? Visit University.witty.computer for full documentation and video guides provided by the Witty Computer Digital Workshop.
