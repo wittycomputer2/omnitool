@@ -4,7 +4,7 @@
 Option 1: Using the AppImage (Easiest)
 The OmniTool AppImage is a pre-compiled bundle for Linux. No installation is required.
 
-> **Quick Start:** [🚀 Download the Latest AppImage for Linux](https://github.com/wittycomputer2/omnitool/releases/download/v3.0.0/OmniTool-x86_64.AppImage)
+> **Quick Start:** [🚀 Download the Latest AppImage for Linux](https://github.com/wittycomputer2/omnitool/releases/download/v3.1.0/omnitool-v3.appimage)
 
 Locate the .AppImage file in the main folder.
 
