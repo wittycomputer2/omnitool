@@ -5,6 +5,7 @@ echo "Checking system dependencies..."
 MISSING=()
 command -v ffmpeg  >/dev/null 2>&1 || MISSING+=("ffmpeg")
 command -v gs      >/dev/null 2>&1 || MISSING+=("ghostscript")
+command -v qpdf    >/dev/null 2>&1 || MISSING+=("qpdf")
 
 if [ ${#MISSING[@]} -ne 0 ]; then
     echo "Missing system packages: ${MISSING[*]}"

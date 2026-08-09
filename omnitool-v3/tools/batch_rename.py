@@ -1,5 +1,6 @@
 """Batch rename – Prefix_001.ext format with zero-padding."""
 
+import random
 import shutil
 from pathlib import Path
 
@@ -7,9 +8,13 @@ from pathlib import Path
 def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
     prefix = options.get("prefix", "file")
     start_number = int(options.get("start_number", 1))
+    randomize_files = options.get("randomize_files", False)
 
-    # Exclude watermark.png
+    # Use a stable sorted order by default. When requested, shuffle first so
+    # the sequence numbers are assigned to files in a random order.
     files = [f for f in sorted(input_dir.iterdir()) if f.is_file() and f.name.lower() != "watermark.png"]
+    if randomize_files:
+        random.SystemRandom().shuffle(files)
     total = len(files)
 
     if total == 0:

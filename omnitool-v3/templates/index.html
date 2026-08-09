@@ -309,6 +309,12 @@
                         class="fas fa-shield-halved text-emerald-400 text-sm"></i></div>
                 <span class="text-sm font-medium">Just strip metadata</span>
             </button>
+            <button onclick="selectTool('password')" data-tool="password"
+                class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center"><i
+                        class="fas fa-key text-amber-400 text-sm"></i></div>
+                <span class="text-sm font-medium">Password Generator</span>
+            </button>
         </nav>
 
         <!-- Footer -->
@@ -416,9 +422,8 @@
                     <div
                         class="flex items-start gap-3 p-3 rounded-lg bg-emerald-500/8 border border-emerald-500/15 mb-1">
                         <i class="fas fa-info-circle text-emerald-400 text-sm mt-0.5 shrink-0"></i>
-                        <p class="text-xs text-emerald-300/80">You must add a file named <strong
-                                class="text-emerald-300">watermark.png</strong> in the <strong
-                                class="text-emerald-300">/input</strong> folder. This file will not be deleted.</p>
+                        <p class="text-xs text-emerald-300/80">Put your watermark image in the <strong
+                                class="text-emerald-300">/watermark</strong> folder. It will be used from there and never deleted.</p>
                     </div>
                     <div>
                         <label
@@ -482,7 +487,7 @@
                 <div id="panel-pdf" class="tool-panel glass-card p-6 hidden">
                     <div class="flex items-center gap-3 text-surface-200/60">
                         <i class="fas fa-info-circle text-accent-400"></i>
-                        <p class="text-sm">Compresses PDF files using Ghostscript at 150dpi (/ebook preset).</p>
+                        <p class="text-sm">Losslessly optimizes PDF structure and streams while keeping selectable text and page content intact.</p>
                     </div>
                 </div>
 
@@ -499,6 +504,10 @@
                             Number</label>
                         <input type="number" id="rename-start" value="1" min="0" class="w-32">
                     </div>
+                    <label class="flex items-center gap-3 cursor-pointer text-sm text-surface-200/70">
+                        <input type="checkbox" id="rename-randomize" class="w-4 h-4 accent-accent-500">
+                        <span>Randomize Files</span>
+                    </label>
                 </div>
 
                 <!-- STRIP ONLY -->
@@ -510,8 +519,29 @@
                     </div>
                 </div>
 
+                <!-- PASSWORD GENERATOR -->
+                <div id="panel-password" class="tool-panel glass-card p-6 space-y-5 hidden">
+                    <div>
+                        <label class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Password length</label>
+                        <input type="number" id="password-length" value="16" min="4" max="4096" class="w-32">
+                    </div>
+                    <p class="text-sm text-surface-200/60">Each password includes lowercase and uppercase letters, numbers, and symbols.</p>
+                    <div id="password-result" class="hidden rounded-xl bg-surface-900/70 border border-surface-700/50 p-4">
+                        <p class="text-xs font-semibold text-surface-200/50 uppercase tracking-wider mb-2">Generated password</p>
+                        <code id="password-value" class="block break-all text-base text-emerald-300 select-all"></code>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="generatePassword()" class="btn-primary px-5 py-2.5 rounded-xl text-sm font-bold text-white flex items-center gap-2">
+                            <i class="fas fa-key"></i> Generate Password
+                        </button>
+                        <button id="copyPasswordBtn" onclick="copyPassword()" class="btn-secondary hidden px-5 py-2.5 rounded-xl text-sm font-semibold">
+                            <i class="fas fa-copy text-accent-400"></i> Copy
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Process / Stop buttons -->
-                <div class="mt-6 flex items-center gap-3">
+                <div id="processControls" class="mt-6 flex items-center gap-3">
                     <button id="processBtn" onclick="startProcess()"
                         class="btn-primary px-8 py-3 rounded-xl text-sm font-bold text-white flex items-center gap-3">
                         <i class="fas fa-play"></i>
@@ -586,9 +616,10 @@
             metadata: { title: 'Convert to JPG', desc: 'Strip all EXIF/metadata and convert to high-quality JPG' },
             audio: { title: 'WAV → MP3 Converter', desc: 'Convert WAV audio files to MP3 with selectable bitrate' },
             video: { title: 'Video Compress', desc: 'Compress video files using H.264 / CRF 23' },
-            pdf: { title: 'PDF Compress', desc: 'Compress PDFs using Ghostscript (150dpi ebook preset)' },
+            pdf: { title: 'PDF Compress', desc: 'Compress PDFs without rasterizing selectable text' },
             rename: { title: 'Batch Rename', desc: 'Rename files with prefix and zero-padded numbering' },
             strip_only: { title: 'Just strip metadata', desc: 'Remove all EXIF/metadata while preserving original format' },
+            password: { title: 'Password Generator', desc: 'Create a secure random password with your chosen length' },
         };
 
         // ─── Tool selection ──────────────────────────────────────────────────
@@ -601,6 +632,7 @@
             document.getElementById('panel-' + name).classList.remove('hidden');
             document.getElementById('toolTitle').textContent = TOOL_INFO[name].title;
             document.getElementById('toolDesc').textContent = TOOL_INFO[name].desc;
+            document.getElementById('processControls').classList.toggle('hidden', name === 'password');
         }
 
         // ─── Meta toggle ─────────────────────────────────────────────────────
@@ -626,6 +658,59 @@
             const mode = document.getElementById('resizer-mode').value;
             document.getElementById('resizer-percent-fields').classList.toggle('hidden', mode !== 'percentage');
             document.getElementById('resizer-fixed-fields').classList.toggle('hidden', mode !== 'fixed');
+        }
+
+        // ─── Browser heartbeat ─────────────────────────────────────────────
+        // The local server uses this to exit shortly after the app window closes.
+        const browserSessionId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+        function sendHeartbeat() {
+            fetch('/api/heartbeat', {
+                method: 'POST',
+                keepalive: true,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: browserSessionId })
+            }).catch(() => {});
+        }
+
+        sendHeartbeat();
+        setInterval(sendHeartbeat, 5000);
+        window.addEventListener('pagehide', () => {
+            navigator.sendBeacon(
+                '/api/browser-closing',
+                new Blob([JSON.stringify({ session_id: browserSessionId })], { type: 'application/json' })
+            );
+        });
+
+        // ─── Password generator ────────────────────────────────────────────
+        async function generatePassword() {
+            const length = document.getElementById('password-length').value;
+            try {
+                const res = await fetch('/api/password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ length })
+                });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.error || 'Unable to generate a password.');
+                document.getElementById('password-value').textContent = data.password;
+                document.getElementById('password-result').classList.remove('hidden');
+                document.getElementById('copyPasswordBtn').classList.remove('hidden');
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        async function copyPassword() {
+            const password = document.getElementById('password-value').textContent;
+            if (!password) return;
+            try {
+                await navigator.clipboard.writeText(password);
+                const button = document.getElementById('copyPasswordBtn');
+                button.innerHTML = '<i class="fas fa-check text-emerald-400"></i> Copied';
+                setTimeout(() => { button.innerHTML = '<i class="fas fa-copy text-accent-400"></i> Copy'; }, 1500);
+            } catch (error) {
+                alert('Unable to copy automatically. Select the password and copy it manually.');
+            }
         }
 
         // ─── File list ───────────────────────────────────────────────────────
@@ -687,6 +772,7 @@
                 case 'rename':
                     opts.prefix = document.getElementById('rename-prefix').value;
                     opts.start_number = document.getElementById('rename-start').value;
+                    opts.randomize_files = document.getElementById('rename-randomize').checked;
                     break;
             }
             return opts;

@@ -1,4 +1,4 @@
-"""Watermark tool – overlay watermark.png onto images with position & coverage control."""
+"""Watermark tool – overlay an image from /watermark onto input images."""
 
 import random
 from pathlib import Path
@@ -13,6 +13,18 @@ POSITIONS = {
     "bottom-left":  (0.02, 0.98),
     "bottom-right": (0.98, 0.98),
 }
+
+WATERMARK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif", ".heic", ".heif", ".avif"}
+
+
+def find_watermark(watermark_dir: Path) -> Path | None:
+    """Return the first supported watermark image, without altering it."""
+    if not watermark_dir.is_dir():
+        return None
+    return next(
+        (path for path in sorted(watermark_dir.iterdir()) if path.is_file() and path.suffix.lower() in WATERMARK_EXTENSIONS),
+        None,
+    )
 
 
 def _apply_watermark(bg: Image.Image, wm: Image.Image, position: str, coverage: float) -> Image.Image:
@@ -41,14 +53,10 @@ def _apply_watermark(bg: Image.Image, wm: Image.Image, position: str, coverage: 
     return result.convert("RGB")
 
 
-def preview(input_dir: Path, temp_dir: Path, options: dict) -> str | None:
+def preview(input_dir: Path, watermark_path: Path, temp_dir: Path, options: dict) -> str | None:
     """Process one random image and save to /temp. Returns filename or None."""
-    wm_path = input_dir / "watermark.png"
-    if not wm_path.exists():
-        return None
-
     exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif", ".avif"}
-    files = [f for f in input_dir.iterdir() if f.suffix.lower() in exts and f.name.lower() != "watermark.png"]
+    files = [f for f in input_dir.iterdir() if f.is_file() and f.suffix.lower() in exts]
     if not files:
         return None
 
@@ -56,7 +64,7 @@ def preview(input_dir: Path, temp_dir: Path, options: dict) -> str | None:
     position = options.get("position", "bottom-right")
     coverage = float(options.get("coverage", 25))
 
-    wm = Image.open(wm_path).convert("RGBA")
+    wm = open_image(watermark_path).convert("RGBA")
     bg = open_image(f)
     result = _apply_watermark(bg, wm, position, coverage)
 
@@ -65,31 +73,31 @@ def preview(input_dir: Path, temp_dir: Path, options: dict) -> str | None:
     for old in temp_dir.iterdir():
         old.unlink()
 
-    out_name = f"preview_{f.name}"
-    if not out_name.lower().endswith((".jpg", ".jpeg", ".png")):
-        out_name = f"preview_{f.stem}.jpg"
+    # A fixed PNG avoids browser preview failures with unsupported source names
+    # or formats, including top-position previews.
+    out_name = "watermark_preview.png"
     out_path = temp_dir / out_name
-    result.save(out_path, quality=95)
+    result.save(out_path, "PNG")
     return out_name
 
 
-def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
+def run(input_dir: Path, output_dir: Path, watermark_dir: Path, options: dict, progress_cb=None):
     """Batch‑apply watermark to all images in /input."""
-    wm_path = input_dir / "watermark.png"
-    if not wm_path.exists():
+    wm_path = find_watermark(watermark_dir)
+    if wm_path is None:
         if progress_cb:
-            progress_cb({"type": "log", "msg": "ERROR: watermark.png not found in /input."})
-            progress_cb({"type": "done", "msg": "Aborted – no watermark.png."})
+            progress_cb({"type": "log", "msg": "ERROR: There is no watermark image file in /watermark, please put one in that folder."})
+            progress_cb({"type": "done", "msg": "Aborted – no watermark image file in /watermark."})
         return
 
     position = options.get("position", "bottom-right")
     coverage = float(options.get("coverage", 25))
     strip_meta = options.get("strip_metadata", True)
 
-    wm = Image.open(wm_path).convert("RGBA")
+    wm = open_image(wm_path).convert("RGBA")
 
     exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif", ".avif"}
-    all_files = [f for f in sorted(input_dir.iterdir()) if f.is_file() and f.name.lower() != "watermark.png"]
+    all_files = [f for f in sorted(input_dir.iterdir()) if f.is_file()]
     files = [f for f in all_files if f.suffix.lower() in exts]
     skipped = [f for f in all_files if f.suffix.lower() not in exts]
 
