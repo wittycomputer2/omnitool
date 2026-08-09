@@ -1,4 +1,4 @@
-"""PDF compressor using Ghostscript."""
+"""Content-preserving PDF compressor using QPDF."""
 
 import subprocess
 from pathlib import Path
@@ -28,19 +28,23 @@ def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
         try:
             out_path = output_dir / f.name
 
+            # QPDF rewrites PDF objects and streams without rasterizing pages,
+            # keeping real text selectable. These options apply lossless stream
+            # compression and object-stream packing only.
             cmd = [
-                "gs",
-                "-sDEVICE=pdfwrite",
-                "-dCompatibilityLevel=1.4",
-                "-dPDFSETTINGS=/ebook",
-                "-dNOPAUSE", "-dQUIET", "-dBATCH",
-                f"-sOutputFile={out_path}",
+                "qpdf",
+                "--compress-streams=y",
+                "--decode-level=generalized",
+                "--recompress-flate",
+                "--compression-level=9",
+                "--object-streams=generate",
                 str(f),
+                str(out_path),
             ]
 
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
 
-            if out_path.exists() and out_path.stat().st_size > 0:
+            if result.returncode == 0 and out_path.exists() and out_path.stat().st_size > 0:
                 orig_size = f.stat().st_size
                 new_size = out_path.stat().st_size
                 saved = max(0, (1 - new_size / orig_size) * 100)

@@ -1,24 +1,32 @@
 """OmniTool – Local File Processing Web App."""
 
 import json
+import os
 import queue
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
 from flask import Flask, render_template, request, jsonify, Response, send_from_directory
+from werkzeug.serving import make_server
 
-from tools import resizer, watermark, audio_converter, video_compressor, pdf_compressor, batch_rename, metadata_stripper, strip_only
+from tools import resizer, watermark, audio_converter, video_compressor, pdf_compressor, batch_rename, metadata_stripper, strip_only, password_generator
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
-INPUT_DIR = BASE_DIR / "input"
-OUTPUT_DIR = BASE_DIR / "output"
-TEMP_DIR = BASE_DIR / "temp"
+# An AppImage is mounted read-only. Keep user files beside the AppImage while
+# retaining the source directory for normal development.
+APPIMAGE_PATH = os.environ.get("APPIMAGE")
+DATA_DIR = Path(APPIMAGE_PATH).resolve().parent if APPIMAGE_PATH else BASE_DIR
+INPUT_DIR = DATA_DIR / "input"
+OUTPUT_DIR = DATA_DIR / "output"
+TEMP_DIR = DATA_DIR / "temp"
+WATERMARK_DIR = DATA_DIR / "watermark"
 
-for d in (INPUT_DIR, OUTPUT_DIR, TEMP_DIR):
+for d in (INPUT_DIR, OUTPUT_DIR, TEMP_DIR, WATERMARK_DIR):
     d.mkdir(exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -31,6 +39,15 @@ _pending_job: dict | None = None
 _pending_lock = threading.Lock()
 _active_worker: threading.Thread | None = None
 _stop_flag = threading.Event()
+_server = None
+_browser_lock = threading.Lock()
+_browser_seen = False
+_browser_sessions: dict[str, float] = {}
+_browser_empty_since: float | None = None
+
+HEARTBEAT_INTERVAL_SECONDS = 5
+HEARTBEAT_TIMEOUT_SECONDS = 45
+CLOSE_GRACE_PERIOD_SECONDS = 3
 
 
 def _send(q: queue.Queue, event: dict):
@@ -69,10 +86,54 @@ def list_files():
 def preview():
     data = request.get_json(force=True)
     options = data.get("options", {})
-    filename = watermark.preview(INPUT_DIR, TEMP_DIR, options)
+    watermark_path = watermark.find_watermark(WATERMARK_DIR)
+    if watermark_path is None:
+        return jsonify({"ok": False, "error": "There is no watermark image file in /watermark, please put one in that folder."})
+
+    filename = watermark.preview(INPUT_DIR, watermark_path, TEMP_DIR, options)
     if filename:
         return jsonify({"ok": True, "url": f"/temp/{filename}"})
-    return jsonify({"ok": False, "error": "No images or watermark.png missing."})
+    return jsonify({"ok": False, "error": "No compatible image files found in /input."})
+
+
+@app.route("/api/password", methods=["POST"])
+def password():
+    """Generate a password without saving it anywhere."""
+    data = request.get_json(force=True)
+    try:
+        length = int(data.get("length", 16))
+        return jsonify({"ok": True, "password": password_generator.generate(length)})
+    except (TypeError, ValueError) as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+
+
+@app.route("/api/heartbeat", methods=["POST"])
+def heartbeat():
+    """Record that an OmniTool browser window is still open."""
+    global _browser_seen, _browser_empty_since
+    data = request.get_json(silent=True) or {}
+    session_id = str(data.get("session_id", ""))
+    if not session_id:
+        return jsonify({"ok": False, "error": "Missing browser session."}), 400
+
+    with _browser_lock:
+        _browser_seen = True
+        _browser_sessions[session_id] = time.monotonic()
+        _browser_empty_since = None
+    return "", 204
+
+
+@app.route("/api/browser-closing", methods=["POST"])
+def browser_closing():
+    """Stop the server shortly after the last browser window closes."""
+    global _browser_empty_since
+    data = request.get_json(silent=True) or {}
+    session_id = str(data.get("session_id", ""))
+    with _browser_lock:
+        _browser_sessions.pop(session_id, None)
+        if _browser_seen and not _browser_sessions:
+            _browser_empty_since = time.monotonic()
+    return "", 204
 
 
 @app.route("/api/process", methods=["POST"])
@@ -150,7 +211,10 @@ def stream():
 
         def _worker():
             try:
-                tool_mod.run(INPUT_DIR, OUTPUT_DIR, job["options"], progress_cb=progress_cb)
+                if job["tool"] == "watermark":
+                    watermark.run(INPUT_DIR, OUTPUT_DIR, WATERMARK_DIR, job["options"], progress_cb=progress_cb)
+                else:
+                    tool_mod.run(INPUT_DIR, OUTPUT_DIR, job["options"], progress_cb=progress_cb)
             except Exception as e:
                 _send(q, {"type": "log", "msg": f"FATAL ERROR: {e}"})
                 _send(q, {"type": "done", "msg": "Processing aborted due to error."})
@@ -185,7 +249,38 @@ def stream():
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+def _stop_when_browser_closes():
+    """Shut down after the browser closes, without breaking a page refresh."""
+    global _browser_empty_since
+    while True:
+        time.sleep(1)
+        with _browser_lock:
+            now = time.monotonic()
+            expired_sessions = [
+                session_id
+                for session_id, last_seen in _browser_sessions.items()
+                if now - last_seen >= HEARTBEAT_TIMEOUT_SECONDS
+            ]
+            for session_id in expired_sessions:
+                del _browser_sessions[session_id]
+
+            if _browser_seen and not _browser_sessions and _browser_empty_since is None:
+                _browser_empty_since = now
+
+            close_requested = (
+                _browser_empty_since is not None
+                and now - _browser_empty_since >= CLOSE_GRACE_PERIOD_SECONDS
+            )
+
+        if close_requested:
+            if _server is not None:
+                _server.shutdown()
+            return
+
+
 if __name__ == "__main__":
+    _server = make_server("0.0.0.0", 5000, app, threaded=True)
+    threading.Thread(target=_stop_when_browser_closes, daemon=True).start()
     print("\n  OmniTool is running at  http://localhost:5000\n")
     webbrowser.open("http://localhost:5000")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    _server.serve_forever()
