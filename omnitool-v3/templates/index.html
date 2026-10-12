@@ -229,6 +229,31 @@
     </style>
 </head>
 
+{% macro processing_rename(tool) %}
+                    <div class="space-y-4">
+                        <label class="flex items-center gap-3 cursor-pointer text-sm text-surface-200/70">
+                            <input type="checkbox" id="{{ tool }}-rename-enabled" onchange="toggleRenameFields('{{ tool }}')"
+                                aria-controls="{{ tool }}-rename-fields" class="w-4 h-4 accent-accent-500">
+                            <span>Rename files during processing</span>
+                        </label>
+                        <div id="{{ tool }}-rename-fields" class="hidden space-y-4">
+                            <div>
+                                <label for="{{ tool }}-rename-prefix" class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Filename prefix (optional)</label>
+                                <input type="text" id="{{ tool }}-rename-prefix" value="" class="w-full" placeholder="e.g. photo">
+                            </div>
+                            <div>
+                                <label for="{{ tool }}-rename-start" class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Start number</label>
+                                <input type="number" id="{{ tool }}-rename-start" value="1" min="0" class="w-32">
+                            </div>
+                            <label class="flex items-center gap-3 cursor-pointer text-sm text-surface-200/70">
+                                <input type="checkbox" id="{{ tool }}-rename-randomize" class="w-4 h-4 accent-accent-500">
+                                <span>Randomize filenames</span>
+                            </label>
+                            <p class="text-xs text-surface-200/40">Uses numbered filenames, such as photo_001.jpg or 001.jpg. Randomizing shuffles which file receives each number.</p>
+                        </div>
+                    </div>
+{% endmacro %}
+
 <body class="bg-surface-900 text-surface-200 min-h-screen flex overflow-hidden">
 
     <!-- ======================== SIDEBAR ======================== -->
@@ -243,7 +268,7 @@
                 </div>
                 <div>
                     <h1 class="text-lg font-bold text-white tracking-tight">OmniTool</h1>
-                    <p class="text-xs text-surface-200/50 font-medium">File Processing Studio</p>
+                    <p class="text-xs text-surface-200/50 font-medium">File Processing Studio • v{{ version }}</p>
                 </div>
             </div>
         </div>
@@ -280,11 +305,17 @@
                         class="fas fa-music text-amber-400 text-sm"></i></div>
                 <span class="text-sm font-medium">WAV → MP3</span>
             </button>
+            <button onclick="selectTool('image_compression')" data-tool="image_compression"
+                class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
+                <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center"><i
+                        class="fas fa-file-image text-purple-400 text-sm"></i></div>
+                <span class="text-sm font-medium">Image Compression</span>
+            </button>
             <button onclick="selectTool('video')" data-tool="video"
                 class="sidebar-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left">
                 <div class="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center"><i
                         class="fas fa-film text-cyan-400 text-sm"></i></div>
-                <span class="text-sm font-medium">Video Compress</span>
+                <span class="text-sm font-medium">Video Compression</span>
             </button>
 
             <p class="px-3 pt-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-surface-200/30">Document Tools
@@ -335,7 +366,7 @@
             <div class="flex flex-col gap-2">
                 <div class="flex items-center gap-2 text-xs text-surface-200/40">
                     <div class="status-dot bg-emerald-400"></div>
-                    <span>Ready • localhost:5000</span>
+                    <span>Ready • {{ request.host }}</span>
                 </div>
                 <div class="text-[10px] text-surface-200/25">
                     Built by [<a href="https://witty.computer" target="_blank" rel="noopener"
@@ -355,11 +386,18 @@
                 <p id="toolDesc" class="text-sm text-surface-200/50 mt-0.5">Resize images by percentage or to a fixed
                     dimension</p>
             </div>
-            <button onclick="refreshFiles()"
-                class="btn-secondary px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2">
-                <i class="fas fa-rotate text-accent-400"></i>
-                Refresh Files
-            </button>
+            <div class="flex items-center gap-3 shrink-0">
+                <button id="moveFilesBtn" onclick="moveOutputToInput()"
+                    class="btn-secondary px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2">
+                    <i class="fas fa-arrow-right-arrow-left text-accent-400"></i>
+                    Move output files back to input
+                </button>
+                <button onclick="refreshFiles()"
+                    class="btn-secondary px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2">
+                    <i class="fas fa-rotate text-accent-400"></i>
+                    Refresh Files
+                </button>
+            </div>
         </header>
 
         <div class="flex-1 flex overflow-hidden">
@@ -386,10 +424,10 @@
                             class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Mode</label>
                         <select id="resizer-mode" onchange="toggleResizerFields()" class="w-full">
                             <option value="percentage">Percentage</option>
-                            <option value="fixed">Fixed Dimension</option>
+                            <option value="fixed" selected>Fixed Dimension</option>
                         </select>
                     </div>
-                    <div id="resizer-percent-fields">
+                    <div id="resizer-percent-fields" class="hidden">
                         <label
                             class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Scale
                             Percentage</label>
@@ -398,7 +436,7 @@
                             <span class="text-sm text-surface-200/40">%</span>
                         </div>
                     </div>
-                    <div id="resizer-fixed-fields" class="hidden space-y-4">
+                    <div id="resizer-fixed-fields" class="space-y-4">
                         <div>
                             <label
                                 class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Target
@@ -415,6 +453,7 @@
                             <input type="number" id="resizer-target" value="1920" min="1" class="w-40">
                         </div>
                     </div>
+                    {{ processing_rename('resizer') }}
                 </div>
 
                 <!-- WATERMARK -->
@@ -453,12 +492,13 @@
                 </div>
 
                 <!-- METADATA -->
-                <div id="panel-metadata" class="tool-panel glass-card p-6 hidden">
+                <div id="panel-metadata" class="tool-panel glass-card p-6 space-y-5 hidden">
                     <div class="flex items-center gap-3 text-surface-200/60">
                         <i class="fas fa-info-circle text-accent-400"></i>
                         <p class="text-sm">Strips all EXIF metadata and converts images (PNG, WEBP, HEIC, AVIF, BMP,
                             TIFF) to high-quality JPG.</p>
                     </div>
+                    {{ processing_rename('metadata') }}
                 </div>
 
                 <!-- AUDIO -->
@@ -474,13 +514,45 @@
                     </div>
                 </div>
 
-                <!-- VIDEO -->
-                <div id="panel-video" class="tool-panel glass-card p-6 hidden">
-                    <div class="flex items-center gap-3 text-surface-200/60">
-                        <i class="fas fa-info-circle text-accent-400"></i>
-                        <p class="text-sm">Compresses MP4/MOV/AVI/MKV videos using H.264 with CRF 23 (good quality/size
-                            balance).</p>
+                <!-- IMAGE COMPRESSION -->
+                <div id="panel-image_compression" class="tool-panel glass-card p-6 space-y-5 hidden">
+                    <p class="text-sm text-surface-200/60">Compress JPG, PNG, and WebP images while keeping their format, dimensions, and transparency. Animated images are left intact.</p>
+                    <div>
+                        <label for="image-quality" class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">JPG / WebP quality</label>
+                        <div class="flex items-center gap-3">
+                            <input type="range" id="image-quality" value="85" min="1" max="100" class="flex-1 accent-accent-500"
+                                oninput="document.getElementById('image-quality-value').textContent = this.value">
+                            <output id="image-quality-value" for="image-quality" class="text-sm font-semibold text-accent-400 w-8">85</output>
+                        </div>
+                        <p class="text-xs text-surface-200/40 mt-2">Higher values preserve more detail; lower values create smaller files. PNG compression is always lossless.</p>
                     </div>
+                    <label class="flex items-center gap-3 cursor-pointer text-sm text-surface-200/70">
+                        <input type="checkbox" id="image-lossless-webp" class="w-4 h-4 accent-accent-500">
+                        <span>Use lossless compression for WebP</span>
+                    </label>
+                    <p class="text-xs text-surface-200/40">The console shows before and after sizes. If compression makes a file larger, its original bytes are moved to output instead. In that case, its original metadata is also retained.</p>
+                </div>
+
+                <!-- VIDEO -->
+                <div id="panel-video" class="tool-panel glass-card p-6 space-y-5 hidden">
+                    <div>
+                        <label for="video-quality" class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Quality</label>
+                        <select id="video-quality" class="w-full">
+                            <option value="18">Very high quality — larger files</option>
+                            <option value="20" selected>High quality — recommended</option>
+                            <option value="23">Balanced quality and size</option>
+                            <option value="26">Smaller files — lower quality</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="video-preset" class="block text-xs font-semibold text-surface-200/60 uppercase tracking-wider mb-2">Encoding speed</label>
+                        <select id="video-preset" class="w-full">
+                            <option value="fast">Fast — quicker processing</option>
+                            <option value="medium">Medium — balanced</option>
+                            <option value="slow" selected>Slow — better compression</option>
+                        </select>
+                    </div>
+                    <p class="text-xs text-surface-200/40">Produces compatible H.264 MP4 video. AAC audio is preserved; other audio is converted at 192 kbps. HDR videos are left intact to preserve their colors. If the result is larger, the original file and metadata are kept.</p>
                 </div>
 
                 <!-- PDF -->
@@ -615,7 +687,8 @@
             watermark: { title: 'Watermark', desc: 'Overlay watermark.png onto your images with position & coverage control' },
             metadata: { title: 'Convert to JPG', desc: 'Strip all EXIF/metadata and convert to high-quality JPG' },
             audio: { title: 'WAV → MP3 Converter', desc: 'Convert WAV audio files to MP3 with selectable bitrate' },
-            video: { title: 'Video Compress', desc: 'Compress video files using H.264 / CRF 23' },
+            video: { title: 'Video Compression', desc: 'Compress videos with adjustable quality and encoding speed' },
+            image_compression: { title: 'Image Compression', desc: 'Reduce JPG, PNG, and WebP file sizes without resizing' },
             pdf: { title: 'PDF Compress', desc: 'Compress PDFs without rasterizing selectable text' },
             rename: { title: 'Batch Rename', desc: 'Rename files with prefix and zero-padded numbering' },
             strip_only: { title: 'Just strip metadata', desc: 'Remove all EXIF/metadata while preserving original format' },
@@ -658,6 +731,11 @@
             const mode = document.getElementById('resizer-mode').value;
             document.getElementById('resizer-percent-fields').classList.toggle('hidden', mode !== 'percentage');
             document.getElementById('resizer-fixed-fields').classList.toggle('hidden', mode !== 'fixed');
+        }
+
+        function toggleRenameFields(tool) {
+            const enabled = document.getElementById(tool + '-rename-enabled').checked;
+            document.getElementById(tool + '-rename-fields').classList.toggle('hidden', !enabled);
         }
 
         // ─── Browser heartbeat ─────────────────────────────────────────────
@@ -737,6 +815,27 @@
             }
         }
 
+        async function moveOutputToInput() {
+            if (processing) return;
+            const button = document.getElementById('moveFilesBtn');
+            button.disabled = true;
+            try {
+                const res = await fetch('/api/move-output-to-input', { method: 'POST' });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                for (const file of data.moved || []) {
+                    if (file.from !== file.to) log(file.from + ' → ' + file.to + ' (name already exists in input)');
+                }
+                log('Moved ' + (data.moved || []).length + ' file(s) from output to input.', 'success');
+                for (const error of data.errors || []) log(error, 'error');
+                await refreshFiles();
+            } catch (error) {
+                log('Unable to move files: ' + error.message, 'error');
+            } finally {
+                button.disabled = processing;
+            }
+        }
+
         // ─── Console ─────────────────────────────────────────────────────────
         function log(msg, type = 'info') {
             const c = document.getElementById('consoleLog');
@@ -769,11 +868,27 @@
                 case 'audio':
                     opts.bitrate = document.getElementById('audio-bitrate').value;
                     break;
+                case 'image_compression':
+                    opts.quality = document.getElementById('image-quality').value;
+                    opts.lossless_webp = document.getElementById('image-lossless-webp').checked;
+                    break;
+                case 'video':
+                    opts.crf = document.getElementById('video-quality').value;
+                    opts.preset = document.getElementById('video-preset').value;
+                    break;
                 case 'rename':
                     opts.prefix = document.getElementById('rename-prefix').value;
                     opts.start_number = document.getElementById('rename-start').value;
                     opts.randomize_files = document.getElementById('rename-randomize').checked;
                     break;
+            }
+            if (['resizer', 'metadata'].includes(currentTool)) {
+                opts.rename_files = document.getElementById(currentTool + '-rename-enabled').checked;
+                if (opts.rename_files) {
+                    opts.prefix = document.getElementById(currentTool + '-rename-prefix').value;
+                    opts.start_number = document.getElementById(currentTool + '-rename-start').value;
+                    opts.randomize_files = document.getElementById(currentTool + '-rename-randomize').checked;
+                }
             }
             return opts;
         }
@@ -787,12 +902,14 @@
             stopBtn.classList.add('hidden');
             stopBtn.classList.remove('flex');
             processing = false;
+            document.getElementById('moveFilesBtn').disabled = false;
             activeEvtSource = null;
         }
 
         async function startProcess() {
             if (processing) return;
             processing = true;
+            document.getElementById('moveFilesBtn').disabled = true;
             const btn = document.getElementById('processBtn');
             const stopBtn = document.getElementById('stopBtn');
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing…';

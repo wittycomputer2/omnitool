@@ -3,6 +3,7 @@
 from pathlib import Path
 from PIL import Image
 from tools.image_utils import open_image
+from tools.batch_rename import plan_names, available_path
 
 # Try to register HEIF support
 try:
@@ -34,17 +35,26 @@ def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
                 progress_cb({"type": "done", "msg": "No files found in /input."})
         return
 
+    names = plan_names(files, options) if options.get("rename_files", False) else None
+    if names is not None:
+        files = list(names)
+    reserved = set()
+
     for i, f in enumerate(files, 1):
         try:
+            output_name = f.name if f.suffix.lower() in (".mp3", ".mp4", ".pdf") else f"{f.stem}.jpg"
+            if names is not None:
+                output_name = str(Path(names[f]).with_suffix(Path(output_name).suffix))
+                out_path = available_path(output_dir, output_name, reserved)
+            else:
+                out_path = output_dir / output_name
             if f.suffix.lower() in (".mp3", ".mp4"):
                 # Use ffmpeg to strip metadata (preserving format)
-                out_path = output_dir / f.name
                 cmd = ["ffmpeg", "-y", "-i", str(f), "-map_metadata", "-1", "-c", "copy", str(out_path)]
                 subprocess.run(cmd, capture_output=True, text=True, timeout=300)
                 msg = f"stripped metadata from {f.name}"
             elif f.suffix.lower() == ".pdf":
                 # Use Ghostscript to strip metadata (preserving format)
-                out_path = output_dir / f.name
                 cmd = [
                     "gs", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
                     "-dNOPAUSE", "-dQUIET", "-dBATCH",
@@ -70,7 +80,6 @@ def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
                 clean = Image.new("RGB", img.size)
                 clean.putdata(list(img.getdata()))
 
-                out_path = output_dir / f"{f.stem}.jpg"
                 clean.save(out_path, "JPEG", quality=95)
                 msg = f"{f.name} → {out_path.name} (metadata stripped)"
 

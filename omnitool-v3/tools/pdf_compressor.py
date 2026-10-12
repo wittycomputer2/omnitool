@@ -1,71 +1,53 @@
-"""Content-preserving PDF compressor using QPDF."""
+"""Lossless PDF compression preserving text, images, and document structure."""
 
 import subprocess
+import tempfile
 from pathlib import Path
+from tools.compression_utils import finish_compression, size_label
 
 
 def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
-    exts = {".pdf"}
-    all_files = [f for f in sorted(input_dir.iterdir()) if f.is_file() and f.name.lower() != "watermark.png"]
-    files = [f for f in all_files if f.suffix.lower() in exts]
-    skipped = [f for f in all_files if f.suffix.lower() not in exts]
+    files = []
 
-    # Report wrong formats
-    if progress_cb:
-        for sf in skipped:
-            progress_cb({"type": "log", "msg": f"⚠ Wrong file format for {sf.name}, skipping."})
+    def emit(event):
+        if progress_cb:
+            progress_cb(event)
+
+    for path in sorted(input_dir.iterdir()):
+        if not path.is_file() or path.name in (".gitkeep", "watermark.png"):
+            continue
+        if path.suffix.lower() == ".pdf":
+            files.append(path)
+        else:
+            emit({"type": "log", "msg": f"⚠ Wrong file format for {path.name}, skipping."})
 
     total = len(files)
-    if total == 0:
-        if progress_cb:
-            if skipped:
-                progress_cb({"type": "done", "msg": f"No PDF files found. {len(skipped)} file(s) with wrong format left intact in /input."})
-            else:
-                progress_cb({"type": "done", "msg": "No files found in /input."})
-        return
-
-    for i, f in enumerate(files, 1):
+    completed = 0
+    for index, source in enumerate(files, 1):
+        temporary = None
         try:
-            out_path = output_dir / f.name
-
-            # QPDF rewrites PDF objects and streams without rasterizing pages,
-            # keeping real text selectable. These options apply lossless stream
-            # compression and object-stream packing only.
+            with tempfile.NamedTemporaryFile(dir=output_dir, suffix=".pdf", delete=False) as handle:
+                temporary = Path(handle.name)
             cmd = [
-                "qpdf",
-                "--compress-streams=y",
-                "--decode-level=generalized",
-                "--recompress-flate",
-                "--compression-level=9",
-                "--object-streams=generate",
-                str(f),
-                str(out_path),
+                "qpdf", "--compress-streams=y", "--decode-level=generalized",
+                "--recompress-flate", "--compression-level=9", "--object-streams=generate",
+                str(source), str(temporary),
             ]
-
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr[-300:] or "QPDF reported a warning or error; original retained.")
+            check = subprocess.run(["qpdf", "--check", str(temporary)], capture_output=True, text=True, timeout=60)
+            if check.returncode != 0:
+                raise RuntimeError(check.stderr[-300:] or "PDF output verification failed.")
+            destination, before, after, saved, kept = finish_compression(source, temporary, output_dir, source.name)
+            completed += 1
+            detail = "already optimized; kept original bytes" if kept else f"saved {saved:.1f}%"
+            emit({"type": "log", "msg": f"[{index}/{total}] ✓ {source.name} → {destination.name}: {size_label(before)} → {size_label(after)} ({detail})"})
+        except Exception as error:
+            emit({"type": "log", "msg": f"[{index}/{total}] ERROR: {source.name}: {error}"})
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+            emit({"type": "progress", "value": int(index / total * 100)})
 
-            if result.returncode == 0 and out_path.exists() and out_path.stat().st_size > 0:
-                orig_size = f.stat().st_size
-                new_size = out_path.stat().st_size
-                saved = max(0, (1 - new_size / orig_size) * 100)
-                f.unlink()
-                if progress_cb:
-                    progress_cb({"type": "log", "msg": f"[{i}/{total}] ✓ {f.name} (saved {saved:.1f}%)"})
-            else:
-                if progress_cb:
-                    err = result.stderr[-200:] if result.stderr else "unknown error"
-                    progress_cb({"type": "log", "msg": f"[{i}/{total}] ERROR: {f.name}: {err}"})
-
-            if progress_cb:
-                progress_cb({"type": "progress", "value": int(i / total * 100)})
-
-        except Exception as e:
-            if progress_cb:
-                progress_cb({"type": "log", "msg": f"[{i}/{total}] ERROR: {f.name}: {e}"})
-                progress_cb({"type": "progress", "value": int(i / total * 100)})
-
-    done_msg = f"PDF compression complete. {total} files processed."
-    if skipped:
-        done_msg += f" {len(skipped)} file(s) with wrong format left intact."
-    if progress_cb:
-        progress_cb({"type": "done", "msg": done_msg})
+    emit({"type": "done", "msg": f"PDF compression complete. {completed} file(s) processed; {total - completed} left in /input."})

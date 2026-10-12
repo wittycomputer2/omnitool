@@ -3,6 +3,7 @@
 from pathlib import Path
 from PIL import Image
 from tools.image_utils import open_image
+from tools.batch_rename import plan_names, available_path
 import json, time
 
 
@@ -14,9 +15,9 @@ def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
         target_size – int  (pixels for fixed, percent for percentage)
         strip_metadata – bool
     """
-    mode = options.get("mode", "percentage")
+    mode = options.get("mode", "fixed")
     side = options.get("side", "largest")
-    target = int(options.get("target_size", 50))
+    target = int(options.get("target_size", 50 if mode == "percentage" else 1920))
     strip_meta = options.get("strip_metadata", True)
 
     exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif", ".avif"}
@@ -37,6 +38,11 @@ def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
             else:
                 progress_cb({"type": "done", "msg": "No files found in /input."})
         return
+
+    names = plan_names(files, options) if options.get("rename_files", False) else None
+    if names is not None:
+        files = list(names)
+    reserved = set()
 
     for i, f in enumerate(files, 1):
         try:
@@ -65,7 +71,7 @@ def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
 
             img_resized = img.resize((new_w, new_h), Image.LANCZOS)
 
-            out_path = output_dir / f.name
+            out_path = available_path(output_dir, names[f], reserved) if names is not None else output_dir / f.name
             if strip_meta:
                 clean = Image.new(img_resized.mode, img_resized.size)
                 clean.putdata(list(img_resized.getdata()))
@@ -81,7 +87,7 @@ def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
             if out_path.exists() and out_path.stat().st_size > 0:
                 f.unlink()
                 if progress_cb:
-                    progress_cb({"type": "log", "msg": f"[{i}/{total}] Resized {f.name} → {new_w}x{new_h}"})
+                    progress_cb({"type": "log", "msg": f"[{i}/{total}] Resized {f.name} → {out_path.name} ({new_w}x{new_h})"})
             else:
                 if progress_cb:
                     progress_cb({"type": "log", "msg": f"[{i}/{total}] ERROR: output verification failed for {f.name}"})

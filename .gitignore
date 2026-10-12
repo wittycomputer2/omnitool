@@ -1,0 +1,14 @@
+# Downloadable applications are distributed through GitHub releases.
+*.AppImage
+
+# Runtime files beside an AppImage.
+/input/
+/output/
+/temp/
+/watermark/
+
+# Development caches and environments.
+__pycache__/
+*.pyc
+venv/
+.venv/

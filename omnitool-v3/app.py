@@ -1,17 +1,20 @@
 """OmniTool – Local File Processing Web App."""
 
+import errno
 import json
 import os
 import queue
+import shutil
+import socket
 import threading
 import time
 import webbrowser
 from pathlib import Path
 
-from flask import Flask, render_template, request, jsonify, Response, send_from_directory
+from flask import Flask, render_template, request, jsonify, Response, send_from_directory, make_response
 from werkzeug.serving import make_server
 
-from tools import resizer, watermark, audio_converter, video_compressor, pdf_compressor, batch_rename, metadata_stripper, strip_only, password_generator
+from tools import resizer, watermark, audio_converter, video_compressor, pdf_compressor, batch_rename, metadata_stripper, strip_only, password_generator, image_compressor
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -32,11 +35,13 @@ for d in (INPUT_DIR, OUTPUT_DIR, TEMP_DIR, WATERMARK_DIR):
 # ---------------------------------------------------------------------------
 # Flask app
 # ---------------------------------------------------------------------------
+APP_VERSION = "3.2.0"
 app = Flask(__name__)
 
 # Pending job + active worker tracking
 _pending_job: dict | None = None
 _pending_lock = threading.Lock()
+_file_operation_lock = threading.Lock()
 _active_worker: threading.Thread | None = None
 _stop_flag = threading.Event()
 _server = None
@@ -60,7 +65,9 @@ def _send(q: queue.Queue, event: dict):
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return render_template("index.html")
+    response = make_response(render_template("index.html", version=APP_VERSION))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/temp/<path:filename>")
@@ -80,6 +87,31 @@ def list_files():
                 "is_watermark": f.name.lower() == "watermark.png",
             })
     return jsonify(files)
+
+
+@app.route("/api/move-output-to-input", methods=["POST"])
+def move_output_to_input():
+    """Move processed files back for another pass without overwriting input."""
+    if not _file_operation_lock.acquire(blocking=False):
+        return jsonify({"ok": False, "error": "Wait until processing finishes before moving files."}), 409
+    moved = []
+    errors = []
+    try:
+        with _pending_lock:
+            if _pending_job is not None:
+                return jsonify({"ok": False, "error": "Wait until processing finishes before moving files."}), 409
+            for source in sorted(OUTPUT_DIR.iterdir()):
+                if not source.is_file() or source.name == ".gitkeep":
+                    continue
+                try:
+                    destination = batch_rename.available_path(INPUT_DIR, source.name)
+                    shutil.move(str(source), str(destination))
+                    moved.append({"from": source.name, "to": destination.name})
+                except OSError as error:
+                    errors.append(f"{source.name}: {error}")
+        return jsonify({"ok": not errors, "moved": moved, "errors": errors})
+    finally:
+        _file_operation_lock.release()
 
 
 @app.route("/api/preview", methods=["POST"])
@@ -144,7 +176,7 @@ def process():
     tool_name = data.get("tool")
     options = data.get("options", {})
 
-    TOOL_NAMES = {"resizer", "watermark", "audio", "video", "pdf", "rename", "metadata", "strip_only"}
+    TOOL_NAMES = {"resizer", "watermark", "audio", "video", "pdf", "rename", "metadata", "strip_only", "image_compression"}
     if tool_name not in TOOL_NAMES:
         return jsonify({"ok": False, "error": f"Unknown tool: {tool_name}"}), 400
 
@@ -171,6 +203,7 @@ def stream():
         "watermark": watermark,
         "audio": audio_converter,
         "video": video_compressor,
+        "image_compression": image_compressor,
         "pdf": pdf_compressor,
         "rename": batch_rename,
         "metadata": metadata_stripper,
@@ -187,7 +220,7 @@ def stream():
         job = None
         for _ in range(100):  # up to 5 seconds
             with _pending_lock:
-                if _pending_job is not None:
+                if _pending_job is not None and _file_operation_lock.acquire(blocking=False):
                     job = _pending_job
                     _pending_job = None
                     break
@@ -218,6 +251,8 @@ def stream():
             except Exception as e:
                 _send(q, {"type": "log", "msg": f"FATAL ERROR: {e}"})
                 _send(q, {"type": "done", "msg": "Processing aborted due to error."})
+            finally:
+                _file_operation_lock.release()
 
         _active_worker = threading.Thread(target=_worker, daemon=True)
         _active_worker.start()
@@ -249,6 +284,23 @@ def stream():
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+def _create_server():
+    """Prefer port 5000; reserve another port if an older instance owns it."""
+    host = "127.0.0.1"
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            listener.bind((host, 5000))
+        except OSError as error:
+            if error.errno != errno.EADDRINUSE:
+                raise
+            listener.bind((host, 0))
+        listener.listen(socket.SOMAXCONN)
+        port = listener.getsockname()[1]
+        # Pass the reserved socket to Werkzeug to avoid a bind/check race.
+        return make_server(host, port, app, threaded=True, fd=listener.fileno())
+
+
 def _stop_when_browser_closes():
     """Shut down after the browser closes, without breaking a page refresh."""
     global _browser_empty_since
@@ -279,8 +331,9 @@ def _stop_when_browser_closes():
 
 
 if __name__ == "__main__":
-    _server = make_server("0.0.0.0", 5000, app, threaded=True)
+    _server = _create_server()
+    url = f"http://127.0.0.1:{_server.port}"
     threading.Thread(target=_stop_when_browser_closes, daemon=True).start()
-    print("\n  OmniTool is running at  http://localhost:5000\n")
-    webbrowser.open("http://localhost:5000")
+    print(f"\n  OmniTool v{APP_VERSION} is running at  {url}\n", flush=True)
+    threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
     _server.serve_forever()

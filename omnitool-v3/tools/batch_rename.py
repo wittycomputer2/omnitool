@@ -5,16 +5,43 @@ import shutil
 from pathlib import Path
 
 
-def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
-    prefix = options.get("prefix", "file")
-    start_number = int(options.get("start_number", 1))
-    randomize_files = options.get("randomize_files", False)
+def plan_names(files, options):
+    """Assign batch names, optionally shuffling the numbering order."""
+    prefix = str(options.get("prefix", "file")).strip()
+    if any(char in prefix for char in ('/', '\\', '\0')):
+        raise ValueError("Filename prefix cannot contain path separators or null characters.")
+    start = int(options.get("start_number", 1))
+    if start < 0:
+        raise ValueError("Start number must be zero or greater.")
+    ordered = list(files)
+    if options.get("randomize_files", False):
+        random.SystemRandom().shuffle(ordered)
+    pad = max(3, len(str(start + len(ordered) - 1)))
+    return {
+        f: f"{prefix + '_' if prefix else ''}{str(start + i).zfill(pad)}{f.suffix.lower()}"
+        for i, f in enumerate(ordered)
+    }
 
+
+def available_path(directory, name, reserved=None):
+    """Keep existing files intact by adding a suffix to a conflicting name."""
+    reserved = reserved if reserved is not None else set()
+    path = directory / name
+    candidate = path
+    number = 1
+    while candidate.exists() or candidate.name in reserved:
+        candidate = path.with_name(f"{path.stem}_{number}{path.suffix}")
+        number += 1
+    reserved.add(candidate.name)
+    return candidate
+
+
+def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
     # Use a stable sorted order by default. When requested, shuffle first so
     # the sequence numbers are assigned to files in a random order.
     files = [f for f in sorted(input_dir.iterdir()) if f.is_file() and f.name.lower() != "watermark.png"]
-    if randomize_files:
-        random.SystemRandom().shuffle(files)
+    names = plan_names(files, options)
+    files = list(names)
     total = len(files)
 
     if total == 0:
@@ -22,15 +49,12 @@ def run(input_dir: Path, output_dir: Path, options: dict, progress_cb=None):
             progress_cb({"type": "done", "msg": "No files found in /input."})
         return
 
-    # Determine zero-padding width
-    max_num = start_number + total - 1
-    pad = max(3, len(str(max_num)))
+    reserved = set()
 
     for i, f in enumerate(files):
         try:
-            num = start_number + i
-            new_name = f"{prefix}_{str(num).zfill(pad)}{f.suffix.lower()}"
-            out_path = output_dir / new_name
+            out_path = available_path(output_dir, names[f], reserved)
+            new_name = out_path.name
 
             shutil.copy2(str(f), str(out_path))
 
